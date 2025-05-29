@@ -13,11 +13,6 @@ jobs:
     services:
       etcd:
         image: quay.io/coreos/etcd:v3.5.16
-        options: >-
-          --health-cmd "etcdctl endpoint health"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
         ports:
           - 2379:2379
         env:
@@ -25,11 +20,6 @@ jobs:
           ETCD_AUTO_COMPACTION_RETENTION: 1000
           ETCD_QUOTA_BACKEND_BYTES: 4294967296
           ETCD_SNAPSHOT_COUNT: 50000
-        command: >
-          etcd -advertise-client-urls=http://0.0.0.0:2379
-               -listen-client-urls=http://0.0.0.0:2379
-               --data-dir /etcd
-               --log-level warn
 
       minio:
         image: minio/minio:RELEASE.2023-03-20T20-16-18Z
@@ -39,29 +29,8 @@ jobs:
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
-        command: server /data --console-address ":9001"
-
-      milvus:
-        image: milvusdb/milvus:v2.5.4
-        ports:
-          - 19530:19530
-          - 9091:9091
-        env:
-          ETCD_ENDPOINTS: etcd:2379
-          MINIO_ADDRESS: minio:9000
-          MINIO_ACCESS_KEY: minioadmin
-          MINIO_SECRET_KEY: minioadmin
-        options: >-
-          --health-cmd "curl -f http://localhost:9091/healthz || exit 1"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 5
-        command: ["milvus", "run", "standalone"]
+        options: --entrypoint ""  # Workaround to prevent entrypoint override issues
+        command: minio server /data --console-address ":9001"
 
     steps:
       - name: Checkout code
@@ -77,14 +46,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install .[dev]
 
+      - name: Start Milvus
+        run: |
+          docker run -d --name milvus \
+            --network host \
+            -e ETCD_ENDPOINTS=localhost:2379 \
+            -e MINIO_ADDRESS=localhost:9000 \
+            -e MINIO_ACCESS_KEY=minioadmin \
+            -e MINIO_SECRET_KEY=minioadmin \
+            -p 19530:19530 \
+            -p 9091:9091 \
+            milvusdb/milvus:v2.5.4 \
+            milvus run standalone
+
       - name: Wait for Milvus
         run: |
-          echo "Waiting for Milvus to be ready..."
+          echo "Waiting for Milvus..."
           for i in {1..30}; do
-            nc -z localhost 19530 && echo "Milvus is up!" && exit 0
+            curl -f http://localhost:9091/healthz && echo "Milvus ready" && exit 0
             sleep 5
           done
-          echo "Milvus failed to start in time." && exit 1
+          echo "Milvus did not start in time" && exit 1
 
       - name: Run tests
         run: pytest
