@@ -29,8 +29,8 @@ jobs:
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
-        options: --entrypoint ""  # Workaround to prevent entrypoint override issues
-        command: minio server /data --console-address ":9001"
+        entrypoint: ''
+        command: server /data --console-address ":9001"
 
     steps:
       - name: Checkout code
@@ -49,9 +49,10 @@ jobs:
       - name: Start Milvus
         run: |
           docker run -d --name milvus \
-            --network host \
-            -e ETCD_ENDPOINTS=localhost:2379 \
-            -e MINIO_ADDRESS=localhost:9000 \
+            --add-host etcd:127.0.0.1 \
+            --add-host minio:127.0.0.1 \
+            -e ETCD_ENDPOINTS=etcd:2379 \
+            -e MINIO_ADDRESS=minio:9000 \
             -e MINIO_ACCESS_KEY=minioadmin \
             -e MINIO_SECRET_KEY=minioadmin \
             -p 19530:19530 \
@@ -62,9 +63,9 @@ jobs:
       - name: Wait for Milvus
         run: |
           echo "Waiting for Milvus..."
-          for i in {1..30}; do
+          for i in {1..60}; do
             curl -f http://localhost:9091/healthz && echo "Milvus ready" && exit 0
-            sleep 5
+            sleep 2
           done
           echo "Milvus did not start in time" && exit 1
 
