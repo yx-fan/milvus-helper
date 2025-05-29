@@ -1,0 +1,41 @@
+name: Run Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      milvus:
+        image: milvusdb/milvus:v2.4.3
+        ports:
+          - 19530:19530
+        options: >-
+          --health-cmd="curl -f http://localhost:9091/health || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Wait for Milvus
+        run: |
+          echo "Waiting for Milvus..."
+          sleep 20
+
+      - name: Run tests
+        run: pytest

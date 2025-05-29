@@ -1,0 +1,21 @@
+[project]
+name = "milvus-helper"
+version = "0.1.0"
+description = "A wrapper around pymilvus to simplify common operations."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Yuxin Fan", email = "lawrence.yuxinfan@outlook.com" }]
+requires-python = ">=3.8"
+dependencies = [
+  "pymilvus>=2.4.3",
+  "numpy",
+  "pandas"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yx-fan/milvus-helper"
+"Source" = "https://github.com/yx-fan/milvus-helper"
+"Bug Tracker" = "https://github.com/yx-fan/milvus-helper/issues"
+
+[project.optional-dependencies]
+dev = ["pytest"]
