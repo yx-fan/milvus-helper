@@ -4,20 +4,65 @@ on:
   push:
     branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
     services:
+      etcd:
+        image: quay.io/coreos/etcd:v3.5.16
+        options: >-
+          --health-cmd "etcdctl endpoint health"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        ports:
+          - 2379:2379
+        env:
+          ETCD_AUTO_COMPACTION_MODE: revision
+          ETCD_AUTO_COMPACTION_RETENTION: 1000
+          ETCD_QUOTA_BACKEND_BYTES: 4294967296
+          ETCD_SNAPSHOT_COUNT: 50000
+        command: >
+          etcd -advertise-client-urls=http://0.0.0.0:2379
+               -listen-client-urls=http://0.0.0.0:2379
+               --data-dir /etcd
+               --log-level warn
+
+      minio:
+        image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+        ports:
+          - 9000:9000
+          - 9001:9001
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
+        command: server /data --console-address ":9001"
+
       milvus:
-        image: milvusdb/milvus:v2.3.9
+        image: milvusdb/milvus:v2.5.4
         ports:
           - 19530:19530
+          - 9091:9091
+        env:
+          ETCD_ENDPOINTS: etcd:2379
+          MINIO_ADDRESS: minio:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
         options: >-
-          --health-cmd "curl -f http://localhost:9091/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+          --health-cmd "curl -f http://localhost:9091/healthz || exit 1"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 5
+        command: ["milvus", "run", "standalone"]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,20 +70,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: 3.11
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install .[dev]
 
-      - name: Wait for Milvus to be ready
+      - name: Wait for Milvus
         run: |
-          echo "Waiting for Milvus..."
-          for i in {1..10}; do
-            nc -zv localhost 19530 && echo "Milvus is up!" && break
+          echo "Waiting for Milvus to be ready..."
+          for i in {1..30}; do
+            nc -z localhost 19530 && echo "Milvus is up!" && exit 0
             sleep 5
           done
+          echo "Milvus failed to start in time." && exit 1
 
       - name: Run tests
         run: pytest
