@@ -36,3 +36,5 @@ print(results)
 ## License
 
 MIT License © 2025 [Yuxin Fan](mailto:lawrence.yuxinfan@outlook.com)
+
+[![PyPI version](https://badge.fury.io/py/milvus-helper.svg)](https://pypi.org/project/milvus-helper/)
